@@ -1,188 +1,114 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PDF Ink Remover — Auto detect & remove handwritten annotations</title>
+
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-  :root {
-    --bg: #ffffff; --bg2: #f5f5f3; --bg3: #eeede9;
-    --text: #1a1a1a; --text2: #6b6b6b;
-    --border: rgba(0,0,0,0.12); --border2: rgba(0,0,0,0.25);
-    --radius: 10px; --radius-lg: 14px;
-    --success-bg: #eaf3de; --success-text: #3b6d11;
-    --warning-bg: #faeeda; --warning-text: #854f0b;
-    --info-bg: #e6f1fb; --info-text: #185fa5;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #1c1c1c; --bg2: #252525; --bg3: #2e2e2e;
-      --text: #f0f0f0; --text2: #999;
-      --border: rgba(255,255,255,0.10); --border2: rgba(255,255,255,0.22);
-      --success-bg: #173404; --success-text: #c0dd97;
-      --warning-bg: #412402; --warning-text: #fac775;
-      --info-bg: #042c53; --info-text: #85b7eb;
-    }
-  }
-
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg3); color: var(--text); min-height: 100vh; padding: 2rem 1rem; }
-  .container { max-width: 760px; margin: 0 auto; }
-
-  header { text-align: center; margin-bottom: 2rem; }
-  header h1 { font-size: 26px; font-weight: 600; margin-bottom: 6px; }
-  header p { font-size: 14px; color: var(--text2); }
-  .badge-row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
-  .badge { font-size: 11px; padding: 3px 10px; border-radius: 99px; border: 0.5px solid var(--border2); color: var(--text2); background: var(--bg); }
-
-  .card { background: var(--bg); border-radius: var(--radius-lg); border: 0.5px solid var(--border); padding: 18px 20px; margin-bottom: 14px; }
-  .card-title { font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; }
-
-  .drop-zone { border: 1.5px dashed var(--border2); border-radius: var(--radius-lg); padding: 3rem 1rem; text-align: center; cursor: pointer; background: var(--bg); transition: background 0.15s, border-color 0.15s; margin-bottom: 14px; }
-  .drop-zone:hover, .drop-zone.drag { background: var(--bg2); border-color: var(--text); }
-  .drop-zone .icon { font-size: 40px; line-height: 1; margin-bottom: 10px; }
-  .drop-zone h2 { font-size: 17px; font-weight: 600; margin-bottom: 4px; }
-  .drop-zone p { font-size: 13px; color: var(--text2); }
-
-  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  @media(max-width:520px) { .grid2 { grid-template-columns: 1fr; } }
-
-  label { font-size: 13px; color: var(--text2); display: block; margin-bottom: 5px; }
-  label .val { font-weight: 600; color: var(--text); }
-  input[type=range] { width: 100%; accent-color: var(--text); height: 4px; cursor: pointer; }
-  select { width: 100%; font-size: 13px; padding: 7px 10px; border-radius: var(--radius); border: 0.5px solid var(--border2); background: var(--bg2); color: var(--text); outline: none; }
-
-  .scan-bar-wrap { background: var(--bg2); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 12px; }
-  .scan-bar-inner { display: flex; align-items: center; gap: 12px; }
-  .spinner { width: 18px; height: 18px; border: 2px solid var(--border2); border-top-color: var(--text); border-radius: 50%; animation: spin 0.8s linear infinite; flex-shrink: 0; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .scan-track { flex: 1; height: 5px; background: var(--border); border-radius: 99px; overflow: hidden; }
-  .scan-fill { height: 100%; background: var(--text); border-radius: 99px; transition: width 0.2s; }
-
-  .detected-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-  .dchip { display: flex; align-items: center; gap: 7px; background: var(--bg2); border: 1.5px solid transparent; border-radius: 99px; padding: 5px 14px 5px 8px; font-size: 13px; cursor: pointer; color: var(--text2); user-select: none; transition: all 0.12s; }
-  .dchip.active { border-color: var(--text); color: var(--text); font-weight: 500; background: var(--bg3); }
-  .dchip-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.15); }
-  .dchip-pct { font-size: 11px; color: var(--text2); margin-left: 2px; }
-
-  .info-box { background: var(--info-bg); color: var(--info-text); border-radius: var(--radius); padding: 10px 14px; font-size: 13px; margin-bottom: 12px; }
-
-  .pages-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; max-height: 320px; overflow-y: auto; padding-right: 4px; margin-top: 4px; }
-  .page-thumb { border-radius: 8px; overflow: hidden; border: 0.5px solid var(--border); position: relative; background: #111; }
-  .page-thumb canvas { width: 100%; height: auto; display: block; }
-  .page-num { position: absolute; bottom: 4px; right: 5px; font-size: 10px; background: rgba(0,0,0,0.65); color: #fff; padding: 1px 5px; border-radius: 4px; }
-  .page-status { position: absolute; top: 4px; left: 4px; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
-  .s-done { background: var(--success-bg); color: var(--success-text); }
-  .s-proc { background: var(--warning-bg); color: var(--warning-text); }
-
-  .progress-meta { display: flex; justify-content: space-between; margin-bottom: 6px; }
-  .progress-meta span { font-size: 13px; color: var(--text2); }
-  .progress-meta strong { font-size: 13px; color: var(--text); }
-  .progress-bar { width: 100%; height: 6px; background: var(--bg3); border-radius: 99px; overflow: hidden; }
-  .progress-fill { height: 100%; background: var(--text); border-radius: 99px; transition: width 0.25s ease; }
-
-  .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
-  .btn { padding: 11px 22px; font-size: 14px; font-weight: 500; border-radius: var(--radius); cursor: pointer; transition: opacity 0.15s; border: none; flex: 1; min-width: 160px; }
-  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
-  .btn-primary { background: var(--text); color: var(--bg); }
-  .btn-primary:hover:not(:disabled) { opacity: 0.82; }
-  .btn-outline { background: transparent; color: var(--text); border: 0.5px solid var(--border2); }
-  .btn-outline:hover:not(:disabled) { background: var(--bg2); }
-
-  #statusMsg { margin-top: 8px; font-size: 12px; color: var(--text2); min-height: 18px; }
-  footer { text-align: center; margin-top: 2.5rem; font-size: 12px; color: var(--text2); }
-  footer a { color: var(--text2); }
+* { box-sizing: border-box; }
+body { margin: 0; }
+.wrap { padding: 1rem 0; font-family: var(--font-sans); }
+.drop-zone { border: 1.5px dashed var(--color-border-secondary); border-radius: var(--border-radius-lg); padding: 2.5rem 1rem; text-align: center; cursor: pointer; background: var(--color-background-secondary); transition: background 0.15s; }
+.drop-zone:hover { background: var(--color-background-tertiary); }
+.section { background: var(--color-background-secondary); border-radius: var(--border-radius-md); border: 0.5px solid var(--color-border-tertiary); padding: 14px 16px; margin-bottom: 12px; }
+.section-title { font-size: 12px; color: var(--color-text-secondary); margin-bottom: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+label { font-size: 13px; color: var(--color-text-secondary); display: block; margin-bottom: 4px; }
+.val { font-weight: 500; color: var(--color-text-primary); }
+.btn-primary { background: var(--color-text-primary); color: var(--color-background-primary); border: none; border-radius: var(--border-radius-md); padding: 10px 20px; font-size: 14px; font-weight: 500; cursor: pointer; width: 100%; margin-top: 4px; }
+.btn-primary:hover { opacity: 0.85; }
+.btn-primary:disabled { opacity: 0.35; cursor: not-allowed; }
+.btn-outline { background: transparent; color: var(--color-text-primary); border: 0.5px solid var(--color-border-secondary); border-radius: var(--border-radius-md); padding: 9px 16px; font-size: 13px; cursor: pointer; }
+.btn-outline:hover { background: var(--color-background-secondary); }
+.btn-outline:disabled { opacity: 0.35; cursor: not-allowed; }
+.pages-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-top: 8px; max-height: 280px; overflow-y: auto; }
+.page-thumb { border-radius: 6px; overflow: hidden; border: 0.5px solid var(--color-border-tertiary); position: relative; background: #111; }
+.page-thumb canvas { width: 100%; height: auto; display: block; }
+.page-num { position: absolute; bottom: 4px; right: 6px; font-size: 10px; background: rgba(0,0,0,0.6); color: #fff; padding: 1px 5px; border-radius: 4px; }
+.page-status { position: absolute; top: 4px; left: 4px; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 500; }
+.status-done { background: var(--color-background-success); color: var(--color-text-success); }
+.status-proc { background: var(--color-background-warning); color: var(--color-text-warning); }
+.progress-bar { width: 100%; height: 6px; background: var(--color-border-tertiary); border-radius: 99px; overflow: hidden; margin: 8px 0; }
+.progress-fill { height: 100%; background: var(--color-text-primary); border-radius: 99px; transition: width 0.2s; }
+.actions { display: flex; gap: 8px; margin-top: 10px; }
+.color-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.chip { display: flex; align-items: center; gap: 5px; background: var(--color-background-primary); border: 0.5px solid var(--color-border-secondary); border-radius: 99px; padding: 3px 10px 3px 6px; font-size: 12px; cursor: pointer; color: var(--color-text-secondary); }
+.chip.active { border-color: var(--color-border-primary); color: var(--color-text-primary); font-weight: 500; }
+.chip-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
 </style>
-</head>
-<body>
-<div class="container">
 
-  <header>
-    <h1>📄 PDF Ink Remover</h1>
-    <p>Scans your PDF → auto-detects all ink colors → you choose which to erase</p>
-    <div class="badge-row">
-      <span class="badge">100% private — no uploads to any server</span>
-      <span class="badge">Works offline</span>
-      <span class="badge">Free forever</span>
-    </div>
-  </header>
+<div class="wrap">
+  <h2 class="sr-only">PDF ink remover — strips colored handwritten annotations from all pages of a PDF</h2>
 
-  <div class="drop-zone" id="dropZone" onclick="document.getElementById('pdfIn').click()">
+  <div id="dropZone" class="drop-zone" onclick="document.getElementById('pdfIn').click()">
     <input type="file" id="pdfIn" accept=".pdf" style="display:none">
-    <div class="icon">📂</div>
-    <h2>Upload your PDF</h2>
-    <p>Click here or drag &amp; drop — ink colors detected automatically</p>
+    <div style="font-size:36px;line-height:1;margin-bottom:8px;">📄</div>
+    <div style="font-weight:500;color:var(--color-text-primary);">Upload your PDF</div>
+    <div style="font-size:13px;color:var(--color-text-secondary);margin-top:4px;">Click or drag & drop · PDF files only</div>
   </div>
 
-  <div id="mainUI" style="display:none">
+  <div id="mainUI" style="display:none;margin-top:1rem;">
 
-    <div class="card" id="scanCard">
-      <div class="card-title">Step 1 — Scanning for ink colors</div>
-      <div class="scan-bar-wrap" id="scanWrap">
-        <div class="scan-bar-inner">
-          <div class="spinner" id="scanSpinner"></div>
-          <span style="font-size:13px;color:var(--text2);flex:1" id="scanLabel">Scanning pages…</span>
-          <span style="font-size:13px;font-weight:600" id="scanPct">0%</span>
-        </div>
-        <div class="scan-track" style="margin-top:10px"><div class="scan-fill" id="scanFill" style="width:0%"></div></div>
+    <div class="section">
+      <div class="section-title">Detection mode</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:0;">
+          <input type="radio" name="mode" value="auto" id="modeAuto" checked> <span style="font-size:13px;color:var(--color-text-primary);">Auto — remove all colored ink (recommended)</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:0;">
+          <input type="radio" name="mode" value="manual" id="modeManual"> <span style="font-size:13px;color:var(--color-text-primary);">Manual — pick specific colors</span>
+        </label>
       </div>
-      <div id="detectedSection" style="display:none">
-        <div class="info-box" id="infoBox"></div>
-        <label style="margin-bottom:8px;display:block">Detected ink colors — toggle which ones to remove:</label>
-        <div class="detected-grid" id="detectedGrid"></div>
-        <div style="margin-top:10px;display:flex;gap:8px">
-          <button class="btn btn-outline" style="flex:none;padding:7px 14px;font-size:12px" onclick="selectAll(true)">Select all</button>
-          <button class="btn btn-outline" style="flex:none;padding:7px 14px;font-size:12px" onclick="selectAll(false)">Deselect all</button>
+
+      <div id="autoSettings">
+        <div class="grid2">
+          <div>
+            <label>Color saturation threshold <span class="val" id="satVal">35</span>%</label>
+            <input type="range" id="satSlider" min="10" max="80" value="35" step="1" style="width:100%">
+          </div>
+          <div>
+            <label>Background type</label>
+            <select id="bgType" style="width:100%;font-size:13px;padding:5px 8px;border-radius:var(--border-radius-md);border:0.5px solid var(--color-border-secondary);background:var(--color-background-primary);color:var(--color-text-primary);">
+              <option value="white">White / light background</option>
+              <option value="dark">Dark / black background</option>
+              <option value="smart">Smart (auto-detect)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div id="manualSettings" style="display:none">
+        <label style="margin-bottom:6px;display:block;">Select colors to remove:</label>
+        <div class="color-chips" id="colorChips">
+          <div class="chip active" data-h="20,40" title="Orange"><div class="chip-dot" style="background:#e07b00"></div>Orange</div>
+          <div class="chip active" data-h="340,10" title="Red"><div class="chip-dot" style="background:#e03030"></div>Red</div>
+          <div class="chip" data-h="200,230" title="Blue"><div class="chip-dot" style="background:#2060d0"></div>Blue</div>
+          <div class="chip" data-h="110,150" title="Green"><div class="chip-dot" style="background:#20a020"></div>Green</div>
+          <div class="chip" data-h="50,70" title="Yellow"><div class="chip-dot" style="background:#c8b000"></div>Yellow</div>
+          <div class="chip" data-h="280,310" title="Purple"><div class="chip-dot" style="background:#9030c0"></div>Purple</div>
+          <div class="chip" data-h="170,200" title="Cyan"><div class="chip-dot" style="background:#00aacc"></div>Cyan</div>
+        </div>
+        <div style="margin-top:8px;">
+          <label>Sensitivity <span class="val" id="manSensVal">60</span></label>
+          <input type="range" id="manSensSlider" min="20" max="100" value="60" step="1" style="width:100%">
         </div>
       </div>
     </div>
 
-    <div class="card" id="tuneCard" style="display:none">
-      <div class="card-title">Step 2 — Fine tune</div>
-      <div class="grid2">
-        <div>
-          <label>Sensitivity <span class="val" id="sensVal">50</span>
-            <span style="font-size:11px;font-weight:400"> — higher removes more</span>
-          </label>
-          <input type="range" id="sensSlider" min="15" max="100" value="50" step="1">
-        </div>
-        <div>
-          <label>Background type</label>
-          <select id="bgType">
-            <option value="smart">Smart — auto detect per page</option>
-            <option value="white">White / light background</option>
-            <option value="dark">Dark / black background</option>
-          </select>
-        </div>
-      </div>
-    </div>
-
-    <div class="card" id="pagesCard" style="display:none">
-      <div class="card-title">Pages <span id="pageCount" style="text-transform:none;font-weight:600;color:var(--text);letter-spacing:0;font-size:13px"></span></div>
+    <div class="section">
+      <div class="section-title">Pages <span id="pageCount" style="color:var(--color-text-primary);text-transform:none;font-weight:500;letter-spacing:0"></span></div>
       <div class="pages-grid" id="pagesGrid"></div>
     </div>
 
-    <div class="card" id="progressCard" style="display:none">
-      <div class="card-title">Progress</div>
-      <div class="progress-meta">
-        <span id="progressLabel">Processing…</span>
-        <strong id="progressPct2">0%</strong>
+    <div id="progressSection" style="display:none;" class="section">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <span style="font-size:13px;color:var(--color-text-secondary);" id="progressLabel">Processing…</span>
+        <span style="font-size:13px;font-weight:500;" id="progressPct">0%</span>
       </div>
       <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
     </div>
 
-    <div class="card" id="actionsCard" style="display:none">
-      <div class="actions">
-        <button class="btn btn-primary" id="processBtn" onclick="startProcessing()">Remove selected ink colors</button>
-        <button class="btn btn-outline" id="downloadBtn" onclick="downloadPDF()" disabled>Download cleaned PDF</button>
-      </div>
-      <div id="statusMsg"></div>
+    <div class="actions">
+      <button class="btn-primary" id="processBtn" onclick="startProcessing()">Remove all ink from PDF</button>
+      <button class="btn-outline" id="downloadBtn" onclick="downloadPDF()" disabled>Download cleaned PDF</button>
     </div>
-
+    <div style="margin-top:8px;font-size:12px;color:var(--color-text-secondary);" id="statusMsg"></div>
   </div>
-
-  <footer>Built with <a href="https://mozilla.github.io/pdf.js/" target="_blank">PDF.js</a> &amp; <a href="https://github.com/parallax/jsPDF" target="_blank">jsPDF</a> · No data leaves your device</footer>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -190,279 +116,241 @@
 <script>
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-const $ = id => document.getElementById(id);
-let pdfDoc = null, totalPages = 0, cleanedCanvases = [];
-let detectedColors = [];
+let pdfDoc = null;
+let totalPages = 0;
+let cleanedCanvases = [];
+let pdfBytes = null;
 
-const dz = $('dropZone');
-dz.ondragover = e => { e.preventDefault(); dz.classList.add('drag'); };
-dz.ondragleave = () => dz.classList.remove('drag');
-dz.ondrop = e => { e.preventDefault(); dz.classList.remove('drag'); if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); };
-$('pdfIn').onchange = e => { if(e.target.files[0]) handleFile(e.target.files[0]); };
-$('sensSlider').oninput = e => $('sensVal').textContent = e.target.value;
+const pdfIn = document.getElementById('pdfIn');
+const dropZone = document.getElementById('dropZone');
+const mainUI = document.getElementById('mainUI');
+const pagesGrid = document.getElementById('pagesGrid');
+const processBtn = document.getElementById('processBtn');
+const downloadBtn = document.getElementById('downloadBtn');
+const statusMsg = document.getElementById('statusMsg');
+const progressSection = document.getElementById('progressSection');
+const progressFill = document.getElementById('progressFill');
+const progressPct = document.getElementById('progressPct');
+const progressLabel = document.getElementById('progressLabel');
+
+document.getElementById('satSlider').oninput = e => { document.getElementById('satVal').textContent = e.target.value; };
+document.getElementById('manSensSlider').oninput = e => { document.getElementById('manSensVal').textContent = e.target.value; };
+
+document.querySelectorAll('input[name="mode"]').forEach(r => {
+  r.onchange = () => {
+    document.getElementById('autoSettings').style.display = r.value === 'auto' ? 'block' : 'none';
+    document.getElementById('manualSettings').style.display = r.value === 'manual' ? 'block' : 'none';
+  };
+});
+
+document.querySelectorAll('.chip').forEach(c => {
+  c.onclick = () => c.classList.toggle('active');
+});
+
+dropZone.ondragover = e => e.preventDefault();
+dropZone.ondrop = e => { e.preventDefault(); if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); };
+pdfIn.onchange = e => { if(e.target.files[0]) handleFile(e.target.files[0]); };
 
 async function handleFile(file) {
-  dz.style.display = 'none';
-  $('mainUI').style.display = 'block';
+  statusMsg.textContent = 'Loading PDF…';
   const ab = await file.arrayBuffer();
+  pdfBytes = ab;
   pdfDoc = await pdfjsLib.getDocument({data: ab}).promise;
   totalPages = pdfDoc.numPages;
-  $('pageCount').textContent = totalPages + ' page' + (totalPages > 1 ? 's' : '');
-  await scanColors();
+  document.getElementById('pageCount').textContent = totalPages + ' pages';
+  pagesGrid.innerHTML = '';
+  cleanedCanvases = new Array(totalPages).fill(null);
+  dropZone.style.display = 'none';
+  mainUI.style.display = 'block';
+  statusMsg.textContent = `Loaded: ${totalPages} pages`;
+  await renderThumbs();
+}
+
+async function renderThumbs() {
+  for(let i = 1; i <= totalPages; i++) {
+    const page = await pdfDoc.getPage(i);
+    const vp = page.getViewport({scale: 0.3});
+    const cv = document.createElement('canvas');
+    cv.width = vp.width; cv.height = vp.height;
+    await page.render({canvasContext: cv.getContext('2d'), viewport: vp}).promise;
+    const box = document.createElement('div');
+    box.className = 'page-thumb';
+    box.id = `thumb-${i}`;
+    box.appendChild(cv);
+    const num = document.createElement('div');
+    num.className = 'page-num'; num.textContent = i;
+    box.appendChild(num);
+    pagesGrid.appendChild(box);
+  }
 }
 
 function rgbToHsl(r, g, b) {
-  r/=255; g/=255; b/=255;
-  const max=Math.max(r,g,b), min=Math.min(r,g,b);
-  let h=0, s=0, l=(max+min)/2;
-  if(max!==min) {
-    const d=max-min;
-    s=l>0.5?d/(2-max-min):d/(max+min);
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r,g,b), min = Math.min(r,g,b);
+  let h, s, l = (max+min)/2;
+  if(max === min) { h=s=0; }
+  else {
+    const d = max-min;
+    s = l > 0.5 ? d/(2-max-min) : d/(max+min);
     switch(max){
       case r: h=((g-b)/d+(g<b?6:0))/6; break;
       case g: h=((b-r)/d+2)/6; break;
       case b: h=((r-g)/d+4)/6; break;
     }
   }
-  return {h:h*360, s, l};
+  return {h: h*360, s, l};
 }
 
-function hslToHex(h, s, l) {
-  s/=100; l/=100;
-  const a=s*Math.min(l,1-l);
-  const f=n=>{const k=(n+h/30)%12;const c=l-a*Math.max(Math.min(k-3,9-k,1),-1);return Math.round(255*c).toString(16).padStart(2,'0');};
-  return '#'+f(0)+f(8)+f(4);
+function isColoredInkAuto(r, g, b, satThreshold, bgType) {
+  const {h, s, l} = rgbToHsl(r, g, b);
+  const sat = s * 100;
+  if(sat < satThreshold) return false;
+  if(bgType === 'white') { if(l > 0.92) return false; if(l < 0.08) return false; }
+  else if(bgType === 'dark') { if(l < 0.05) return false; if(l > 0.95) return false; }
+  else { if(l < 0.04 || l > 0.96) return false; }
+  return true;
 }
 
-function hueToName(h) {
-  if(h<15||h>=345) return 'Red';
-  if(h<45)  return 'Orange';
-  if(h<70)  return 'Yellow';
-  if(h<155) return 'Green';
-  if(h<195) return 'Cyan';
-  if(h<255) return 'Blue';
-  if(h<285) return 'Indigo';
-  if(h<315) return 'Purple';
-  return 'Pink';
-}
-
-async function scanColors() {
-  const hBuckets = new Array(36).fill(0);
-  let totalColored = 0;
-
-  for(let i=1;i<=totalPages;i++) {
-    const pct = Math.round((i-1)/totalPages*100);
-    $('scanFill').style.width = pct+'%';
-    $('scanPct').textContent = pct+'%';
-    $('scanLabel').textContent = `Scanning page ${i} of ${totalPages}…`;
-
-    const page = await pdfDoc.getPage(i);
-    const vp = page.getViewport({scale:0.22});
-    const cv = document.createElement('canvas');
-    cv.width=vp.width; cv.height=vp.height;
-    await page.render({canvasContext:cv.getContext('2d'),viewport:vp}).promise;
-    const data = cv.getContext('2d').getImageData(0,0,cv.width,cv.height).data;
-
-    for(let p=0;p<data.length;p+=4) {
-      const {h,s,l} = rgbToHsl(data[p],data[p+1],data[p+2]);
-      if(s>0.28 && l>0.07 && l<0.93) {
-        hBuckets[Math.floor(h/10)%36]++;
-        totalColored++;
-      }
-    }
-    await new Promise(r=>setTimeout(r,0));
-  }
-
-  $('scanFill').style.width='100%';
-  $('scanPct').textContent='100%';
-  $('scanLabel').textContent='Scan complete!';
-  $('scanSpinner').style.display='none';
-
-  const threshold = Math.max(totalColored * 0.004, 10);
-  const clusters = [];
-  const visited = new Array(36).fill(false);
-
-  for(let i=0;i<36;i++) {
-    if(visited[i]||hBuckets[i]<threshold) continue;
-    let sumH=0, sumCount=0, j=i;
-    while(j<36 && hBuckets[j]>=threshold && !visited[j]) {
-      sumH+=j*10*hBuckets[j]; sumCount+=hBuckets[j]; visited[j]=true; j++;
-    }
-    if(sumCount>0) clusters.push({h:sumH/sumCount, count:sumCount, pct:Math.round(sumCount/totalColored*100)});
-  }
-
-  clusters.sort((a,b)=>b.count-a.count);
-  detectedColors = clusters.slice(0,8).map(c=>({
-    h:c.h, hex:hslToHex(c.h,80,50),
-    label:hueToName(c.h), pct:c.pct, selected:true
-  }));
-
-  renderDetectedColors();
-}
-
-function renderDetectedColors() {
-  const grid = $('detectedGrid');
-  grid.innerHTML = '';
-
-  if(!detectedColors.length) {
-    $('infoBox').textContent = 'No colored ink detected. The PDF may already be clean.';
-    $('detectedSection').style.display = 'block';
-    return;
-  }
-
-  $('infoBox').innerHTML = `Found <strong>${detectedColors.length} ink color${detectedColors.length>1?'s':''}</strong> — all selected. Uncheck any you want to keep.`;
-  $('detectedSection').style.display = 'block';
-
-  detectedColors.forEach((c,idx) => {
-    const chip = document.createElement('div');
-    chip.className = 'dchip' + (c.selected?' active':'');
-    chip.innerHTML = `<div class="dchip-dot" style="background:${c.hex}"></div>${c.label}<span class="dchip-pct">${c.pct}%</span>`;
-    chip.onclick = () => { c.selected=!c.selected; chip.classList.toggle('active',c.selected); };
-    grid.appendChild(chip);
-  });
-
-  $('tuneCard').style.display='block';
-  $('pagesCard').style.display='block';
-  $('actionsCard').style.display='block';
-  renderThumbs();
-}
-
-function selectAll(val) {
-  detectedColors.forEach((c,i) => { c.selected=val; $('detectedGrid').children[i].classList.toggle('active',val); });
-}
-
-async function renderThumbs() {
-  $('pagesGrid').innerHTML='';
-  for(let i=1;i<=totalPages;i++) {
-    const page=await pdfDoc.getPage(i);
-    const vp=page.getViewport({scale:0.28});
-    const cv=document.createElement('canvas');
-    cv.width=vp.width; cv.height=vp.height;
-    await page.render({canvasContext:cv.getContext('2d'),viewport:vp}).promise;
-    const box=document.createElement('div');
-    box.className='page-thumb'; box.id=`thumb-${i}`;
-    box.appendChild(cv);
-    const num=document.createElement('div');
-    num.className='page-num'; num.textContent=i;
-    box.appendChild(num);
-    $('pagesGrid').appendChild(box);
-  }
-}
-
-function hueDist(h1,h2) { let d=Math.abs(h1-h2); return d>180?360-d:d; }
-
-function isInk(r,g,b,spread) {
-  const {h,s,l}=rgbToHsl(r,g,b);
-  if(s<0.18||l<0.05||l>0.95) return false;
-  for(const c of detectedColors) {
-    if(!c.selected) continue;
-    if(hueDist(h,c.h)<spread) return true;
+function isColoredInkManual(r, g, b, activeHues, sensitivity) {
+  const {h, s, l} = rgbToHsl(r, g, b);
+  if(s < 0.2) return false;
+  if(l < 0.05 || l > 0.95) return false;
+  const dist = sensitivity * 1.5;
+  for(const [hMin, hMax] of activeHues) {
+    if(hMin > hMax) { if(h >= hMin || h <= hMax) return true; }
+    else { if(h >= hMin - dist && h <= hMax + dist) return true; }
   }
   return false;
 }
 
-function neighborFill(data,x,y,w,h,mask) {
+function getNeighborFill(data, x, y, w, h, mask) {
   let sr=0,sg=0,sb=0,cnt=0;
-  for(let dy=-6;dy<=6;dy++) for(let dx=-6;dx<=6;dx++) {
+  for(let dy=-5;dy<=5;dy++) for(let dx=-5;dx<=5;dx++) {
     const nx=x+dx,ny=y+dy;
-    if(nx<0||ny<0||nx>=w||ny>=h||mask[ny*w+nx]) continue;
+    if(nx<0||ny<0||nx>=w||ny>=h) continue;
+    if(mask[ny*w+nx]) continue;
     const ni=(ny*w+nx)*4;
     sr+=data[ni];sg+=data[ni+1];sb+=data[ni+2];cnt++;
   }
-  return cnt>0?[Math.round(sr/cnt),Math.round(sg/cnt),Math.round(sb/cnt)]:null;
+  if(cnt>0) return [Math.round(sr/cnt),Math.round(sg/cnt),Math.round(sb/cnt)];
+  return null;
 }
 
-function detectBg(data,w,h) {
-  let light=0,dark=0;
-  [[0,0],[w-1,0],[0,h-1],[w-1,h-1],[Math.floor(w/2),0],[0,Math.floor(h/2)]].forEach(([x,y])=>{
-    const i=(y*w+x)*4;
-    ((data[i]+data[i+1]+data[i+2])/3>128?light:dark)++;
-  });
-  return light>=dark?'white':'dark';
-}
+async function processPage(pageNum) {
+  const page = await pdfDoc.getPage(pageNum);
+  const scale = 2.0;
+  const vp = page.getViewport({scale});
+  const cv = document.createElement('canvas');
+  cv.width = vp.width; cv.height = vp.height;
+  const ctx = cv.getContext('2d');
+  await page.render({canvasContext: ctx, viewport: vp}).promise;
 
-async function processPage(pageNum,spread) {
-  const page=await pdfDoc.getPage(pageNum);
-  const vp=page.getViewport({scale:2.0});
-  const cv=document.createElement('canvas');
-  cv.width=vp.width; cv.height=vp.height;
-  const ctx=cv.getContext('2d');
-  await page.render({canvasContext:ctx,viewport:vp}).promise;
+  const imgData = ctx.getImageData(0, 0, cv.width, cv.height);
+  const data = imgData.data;
+  const w = cv.width, h = cv.height;
+  const mask = new Uint8Array(w*h);
 
-  const imgData=ctx.getImageData(0,0,cv.width,cv.height);
-  const data=imgData.data;
-  const w=cv.width,h=cv.height;
-  const mask=new Uint8Array(w*h);
+  const mode = document.querySelector('input[name="mode"]:checked').value;
+  const bgType = document.getElementById('bgType').value;
+  const satThreshold = parseInt(document.getElementById('satSlider').value);
+  const manSens = parseInt(document.getElementById('manSensSlider').value) / 100 * 60;
 
-  const bgType=$('bgType').value;
-  const bg=bgType==='smart'?detectBg(data,w,h):bgType;
+  const activeHues = [];
+  if(mode === 'manual') {
+    document.querySelectorAll('.chip.active').forEach(c => {
+      const parts = c.dataset.h.split(',').map(Number);
+      activeHues.push(parts);
+    });
+  }
 
   for(let y=0;y<h;y++) for(let x=0;x<w;x++) {
     const i=(y*w+x)*4;
-    mask[y*w+x]=isInk(data[i],data[i+1],data[i+2],spread)?1:0;
+    const r=data[i],g=data[i+1],b=data[i+2];
+    let ink = false;
+    if(mode==='auto') ink = isColoredInkAuto(r,g,b,satThreshold,bgType);
+    else ink = isColoredInkManual(r,g,b,activeHues,manSens);
+    if(ink) mask[y*w+x]=1;
   }
+
   for(let y=0;y<h;y++) for(let x=0;x<w;x++) {
     if(!mask[y*w+x]) continue;
     const i=(y*w+x)*4;
-    const fill=neighborFill(data,x,y,w,h,mask);
-    if(fill){data[i]=fill[0];data[i+1]=fill[1];data[i+2]=fill[2];data[i+3]=255;}
-    else{const v=bg==='dark'?0:255;data[i]=v;data[i+1]=v;data[i+2]=v;data[i+3]=255;}
+    const fill = getNeighborFill(data,x,y,w,h,mask);
+    if(fill) { data[i]=fill[0];data[i+1]=fill[1];data[i+2]=fill[2];data[i+3]=255; }
+    else {
+      const bg = bgType==='dark'?0:255;
+      data[i]=bg;data[i+1]=bg;data[i+2]=bg;data[i+3]=255;
+    }
   }
-  ctx.putImageData(imgData,0,0);
+
+  ctx.putImageData(imgData, 0, 0);
   return cv;
 }
 
 async function startProcessing() {
-  if(!detectedColors.filter(c=>c.selected).length){setStatus('Select at least one color.');return;}
-  $('processBtn').disabled=true; $('downloadBtn').disabled=true;
-  $('progressCard').style.display='block';
-  cleanedCanvases=[];
-  const spread=parseInt($('sensSlider').value)*0.35+10;
+  processBtn.disabled = true;
+  downloadBtn.disabled = true;
+  progressSection.style.display = 'block';
+  cleanedCanvases = [];
 
   for(let i=1;i<=totalPages;i++) {
-    $('progressLabel').textContent=`Processing page ${i} of ${totalPages}…`;
-    $('progressPct2').textContent=Math.round(((i-1)/totalPages)*100)+'%';
-    $('progressFill').style.width=Math.round(((i-1)/totalPages)*100)+'%';
+    progressLabel.textContent = `Processing page ${i} of ${totalPages}…`;
+    const pct = Math.round(((i-1)/totalPages)*100);
+    progressFill.style.width = pct+'%';
+    progressPct.textContent = pct+'%';
 
-    const thumb=$(`thumb-${i}`);
-    let badge=thumb.querySelector('.page-status');
-    if(!badge){badge=document.createElement('div');badge.className='page-status';thumb.appendChild(badge);}
-    badge.className='page-status s-proc';badge.textContent='…';
+    const thumb = document.getElementById(`thumb-${i}`);
+    const s = document.createElement('div');
+    s.className='page-status status-proc'; s.textContent='…';
+    thumb.appendChild(s);
 
-    const cleaned=await processPage(i,spread);
+    const cleaned = await processPage(i);
     cleanedCanvases.push(cleaned);
-    badge.className='page-status s-done';badge.textContent='✓';
-    const tc=thumb.querySelector('canvas');
-    tc.width=cleaned.width;tc.height=cleaned.height;
-    tc.getContext('2d').drawImage(cleaned,0,0,tc.width,tc.height);
-    await new Promise(r=>setTimeout(r,0));
+
+    s.className='page-status status-done'; s.textContent='✓';
+    const cv = thumb.querySelector('canvas');
+    const ctx = cv.getContext('2d');
+    cv.width = cleaned.width; cv.height = cleaned.height;
+    ctx.drawImage(cleaned, 0, 0, cv.width, cv.height);
+
+    await new Promise(r => setTimeout(r, 0));
   }
 
-  $('progressLabel').textContent='All pages processed!';
-  $('progressPct2').textContent='100%';
-  $('progressFill').style.width='100%';
-  $('processBtn').disabled=false; $('downloadBtn').disabled=false;
-  setStatus(`✓ All ${totalPages} pages cleaned. Click "Download cleaned PDF".`);
+  progressFill.style.width='100%'; progressPct.textContent='100%';
+  progressLabel.textContent='All pages processed!';
+  processBtn.disabled = false;
+  downloadBtn.disabled = false;
+  statusMsg.textContent = `All ${totalPages} pages cleaned. Click Download to save.`;
 }
 
 async function downloadPDF() {
   if(!cleanedCanvases.length) return;
-  $('downloadBtn').disabled=true; setStatus('Building PDF…');
-  const {jsPDF}=window.jspdf;
-  const first=cleanedCanvases[0];
-  const W=first.width*72/144,H=first.height*72/144;
-  const pdf=new jsPDF({orientation:W>H?'landscape':'portrait',unit:'pt',format:[W,H]});
+  downloadBtn.disabled = true;
+  statusMsg.textContent = 'Building PDF…';
+
+  const { jsPDF } = window.jspdf;
+  const firstCv = cleanedCanvases[0];
+  const wPt = firstCv.width * 72 / 144;
+  const hPt = firstCv.height * 72 / 144;
+
+  const pdf = new jsPDF({ orientation: wPt>hPt?'landscape':'portrait', unit:'pt', format:[wPt,hPt] });
+
   for(let i=0;i<cleanedCanvases.length;i++) {
-    if(i>0){const cv=cleanedCanvases[i];pdf.addPage([cv.width*72/144,cv.height*72/144],cv.width>cv.height?'landscape':'portrait');}
-    pdf.addImage(cleanedCanvases[i].toDataURL('image/jpeg',0.93),'JPEG',0,0,cleanedCanvases[i].width*72/144,cleanedCanvases[i].height*72/144);
-    setStatus(`Building PDF: page ${i+1} / ${cleanedCanvases.length}…`);
+    if(i>0) {
+      const cv = cleanedCanvases[i];
+      const w2 = cv.width*72/144, h2=cv.height*72/144;
+      pdf.addPage([w2,h2], w2>h2?'landscape':'portrait');
+    }
+    const imgData = cleanedCanvases[i].toDataURL('image/jpeg', 0.92);
+    const cv = cleanedCanvases[i];
+    const w2=cv.width*72/144, h2=cv.height*72/144;
+    pdf.addImage(imgData,'JPEG',0,0,w2,h2);
+    statusMsg.textContent = `Building PDF: page ${i+1}/${cleanedCanvases.length}…`;
     await new Promise(r=>setTimeout(r,0));
   }
-  pdf.save('cleaned_document.pdf');
-  $('downloadBtn').disabled=false; setStatus('✓ PDF downloaded!');
-}
 
-function setStatus(msg){$('statusMsg').textContent=msg;}
+  pdf.save('cleaned_document.pdf');
+  downloadBtn.disabled = false;
+  statusMsg.textContent = 'PDF downloaded!';
+}
 </script>
-</body>
-</html>
